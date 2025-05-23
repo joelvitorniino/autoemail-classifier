@@ -76,3 +76,5 @@ uvicorn main:app --reload
 
 O servidor será iniciado em http://127.0.0.1:8000
 
+### 6. Arquivo Txt
+- Para testar o arquivo Txt, deverá seguir o modelo contido no arquivos test_emails.txt (localizado em /mock_test/test_emails.txt). 

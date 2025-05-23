@@ -7,10 +7,14 @@ import hashlib
 import time
 from app.email_processor import EmailProcessor
 
+# Initialize FastAPI app
 app = FastAPI()
+
+# Configure templates and static files
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,51 +22,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global instances
 email_processor = EmailProcessor()
+
+# Constants
+PROCESSING_TIME_ESTIMATES = {
+    "fast": lambda n: 2 * n + 1,
+    "balanced": lambda n: 5 * n + 3,
+    "thorough": lambda n: 10 * n + 5
+}
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    """Render the main index page."""
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/process-email")
 async def process_email(
     text: str = Form(None),
     file: UploadFile = File(None),
-    mode: str = Form("fast")  # Adiciona o parâmetro mode com valor padrão
-):
+    mode: str = Form("fast")
+) -> JSONResponse:
+    """
+    Process email content either from direct text input or file upload.
+    
+    Args:
+        text: Raw email text content
+        file: Uploaded file containing email content
+        mode: Processing mode ('fast', 'balanced', 'thorough')
+    
+    Returns:
+        JSONResponse containing processing results and metadata
+    """
     start_time = time.time()
     
-    if file:
-        content = (await file.read()).decode("utf-8")
-        is_file = True
-    elif text:
-        content = text
-        is_file = False
-    else:
-        return JSONResponse({"error": "Nenhum texto ou arquivo enviado."}, status_code=400)
+    # Validate input
+    content, is_file = await _get_content_from_input(text, file)
+    if not content:
+        return JSONResponse(
+            {"error": "No text or file provided."},
+            status_code=400
+        )
 
-    # Estima o tempo de processamento com base no modo
-    num_messages = len([msg for msg in content.split('---') if msg.strip()])
-    estimated_times = {
-        "fast": 2 * num_messages + 1,
-        "balanced": 5 * num_messages + 3,
-        "thorough": 10 * num_messages + 5
-    }
-    estimated_time = estimated_times.get(mode, 2 * num_messages + 1)
-    
-    # Processa as mensagens usando a instância com o modo especificado
+    # Process messages
+    messages = [msg.strip() for msg in content.split('---') if msg.strip()]
     results = await email_processor.process_multiple_messages(content, mode)
     
-    # Calcula o tempo real de processamento
-    processing_time = time.time() - start_time
+    # Calculate processing metrics
+    processing_metrics = _calculate_processing_metrics(
+        start_time=start_time,
+        num_messages=len(messages),
+        mode=mode
+    )
     
     return JSONResponse({
         "results": results,
-        "processing_info": {
-            "estimated_time": round(estimated_time, 2),
-            "actual_time": round(processing_time, 2),
-            "is_file": is_file,
-            "num_messages": len(results),
-            "mode": mode
-        }
+        "processing_info": processing_metrics
     })
+
+async def _get_content_from_input(
+    text: str,
+    file: UploadFile
+) -> tuple[str, bool]:
+    """Extract content from either text or file input."""
+    if file:
+        return (await file.read()).decode("utf-8"), True
+    if text:
+        return text, False
+    return None, False
+
+def _calculate_processing_metrics(
+    start_time: float,
+    num_messages: int,
+    mode: str
+) -> dict:
+    """Calculate processing time metrics."""
+    estimated_time = PROCESSING_TIME_ESTIMATES.get(
+        mode,
+        PROCESSING_TIME_ESTIMATES["fast"]
+    )(num_messages)
+    
+    actual_time = time.time() - start_time
+    
+    return {
+        "estimated_time": round(estimated_time, 2),
+        "actual_time": round(actual_time, 2),
+        "num_messages": num_messages,
+        "mode": mode
+    }

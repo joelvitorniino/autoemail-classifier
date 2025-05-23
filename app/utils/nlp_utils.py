@@ -5,11 +5,6 @@ from nltk.corpus import stopwords
 from nltk.stem import RSLPStemmer
 from typing import List
 
-# Download required NLTK data
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
-nltk.download('rslp', quiet=True)
-
 class NLPProcessor:
     """Processes and analyzes Portuguese text with NLP techniques."""
     

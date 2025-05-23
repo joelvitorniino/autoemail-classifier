@@ -1,0 +1,8 @@
+transformers
+torch
+nltk
+scikit-learn
+fastapi
+uvicorn
+python-multipart
+jinja2

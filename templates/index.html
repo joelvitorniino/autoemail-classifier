@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Classificador Automático de Emails</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="logo">
+            <i class="fas fa-envelope-open-text"></i>
+            <h1>Auto Email Classifier</h1>
+        </div>
+        <p class="subtitle">Classificação inteligente de emails corporativos</p>
+        <button id="theme-toggle" class="theme-toggle">
+            <i class="fas fa-moon"></i>
+            <span>Modo Escuro</span>
+        </button>
+    </header>
+
+    <main>
+        <form id="email-form">
+            <div class="form-group">
+                <label for="text">Digite o texto do email:</label>
+                <textarea id="text" name="text" rows="8" placeholder="Cole o conteúdo do email aqui..." required></textarea>
+                <small id="text-error" class="error-message"></small>
+                <div class="preview-container">
+                    <h4>Pré-visualização:</h4>
+                    <div id="email-preview" class="preview-text"></div>
+                </div>
+            </div>
+            
+            <div class="form-group file-upload">
+                <label for="file" class="upload-label">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Ou envie um arquivo (.txt)</span>
+                    <span id="file-name"></span>
+                </label>
+                <input type="file" id="file" name="file" accept=".txt" />
+            </div>
+            
+            <div class="form-group mode-selection">
+                <label>Modo de Processamento:</label>
+                <div class="mode-options">
+                    <div class="mode-option">
+                        <input type="radio" id="mode-fast" name="processing-mode" value="fast" checked>
+                        <label for="mode-fast">
+                            <i class="fas fa-bolt"></i>
+                            <span>Rápido</span>
+                            <small>Análise básica (2-5 segundos)</small>
+                        </label>
+                    </div>
+                    <div class="mode-option">
+                        <input type="radio" id="mode-balanced" name="processing-mode" value="balanced">
+                        <label for="mode-balanced">
+                            <i class="fas fa-scale-balanced"></i>
+                            <span>Balanceado</span>
+                            <small>Análise detalhada (5-10 segundos)</small>
+                        </label>
+                    </div>
+                    <div class="mode-option">
+                        <input type="radio" id="mode-thorough" name="processing-mode" value="thorough">
+                        <label for="mode-thorough">
+                            <i class="fas fa-microscope"></i>
+                            <span>Completo</span>
+                            <small>Análise profunda (10-20 segundos)</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn">
+                <i class="fas fa-robot"></i>
+                <span>Analisar Email</span>
+            </button>
+        </form>
+
+        <div id="loading" class="loading-container">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <div class="loading-info">
+                    <h3>Processando seu email...</h3>
+                    <div id="progress-info">
+                        <span id="estimated-time"></span>
+                        <div class="progress-bar">
+                            <div id="progress-fill"></div>
+                        </div>
+                    </div>
+                    <div id="long-wait-message" class="long-wait-message">
+                        <i class="fas fa-info-circle"></i>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="history" class="history-container">
+            <h3><i class="fas fa-history"></i> Histórico de Análises</h3>
+            <div id="history-list" class="history-list"></div>
+        </div>
+
+        <div id="results" class="results-container">
+            <div class="results-header">
+                <h2><i class="fas fa-chart-bar"></i> Resultados da Análise</h2>
+                <button id="download-btn" class="download-btn">
+                    <i class="fas fa-download"></i>
+                    Exportar
+                </button>
+            </div>
+            
+            <div id="processing-info" class="processing-info"></div>
+            
+            <div id="messages-container" class="messages-container"></div>
+            
+            <div class="feedback-section">
+                <p>Esta análise foi útil?</p>
+                <div class="feedback-buttons">
+                    <button class="feedback-btn positive"><i class="fas fa-thumbs-up"></i> Sim</button>
+                    <button class="feedback-btn negative"><i class="fas fa-thumbs-down"></i> Não</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+const form = document.getElementById('email-form');
+const loading = document.getElementById('loading');
+const results = document.getElementById('results');
+const historyContainer = document.getElementById('history');
+const historyList = document.getElementById('history-list');
+const messagesContainer = document.getElementById('messages-container');
+const estimatedTimeSpan = document.getElementById('estimated-time');
+const processingInfo = document.getElementById('processing-info');
+const longWaitMessage = document.getElementById('long-wait-message');
+const progressFill = document.getElementById('progress-fill');
+const fileInput = document.getElementById('file');
+const fileNameSpan = document.getElementById('file-name');
+const downloadBtn = document.getElementById('download-btn');
+const textArea = document.getElementById('text');
+const preview = document.getElementById('email-preview');
+const textError = document.getElementById('text-error');
+const themeToggle = document.getElementById('theme-toggle');
+
+let processingStartTime = null;
+let longWaitTimeout = null;
+let currentData = null;
+let analysisHistory = JSON.parse(localStorage.getItem('analysisHistory')) || [];
+
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${Math.round(seconds)} segundos`;
+    } else {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.round(seconds % 60);
+        return `${minutes} minuto${minutes > 1 ? 's' : ''}${remainingSeconds > 0 ? ` e ${remainingSeconds} segundos` : ''}`;
+    }
+}
+
+function updateProgress(elapsedSeconds, estimatedTotal) {
+    const progressPercent = Math.min(100, (elapsedSeconds / estimatedTotal) * 100);
+    progressFill.style.width = `${progressPercent}%`;
+    
+    if (progressPercent < 33) {
+        progressFill.style.backgroundColor = '#4CAF50';
+    } else if (progressPercent < 66) {
+        progressFill.style.backgroundColor = '#FFC107';
+    } else {
+        progressFill.style.backgroundColor = '#F44336';
+    }
+}
+
+function updateLongWaitMessage() {
+    if (!processingStartTime) return;
+    
+    const elapsedSeconds = (Date.now() - processingStartTime) / 1000;
+    const longWaitElement = longWaitMessage.querySelector('span');
+    
+    if (elapsedSeconds >= 15) {
+        const estimatedTotalTime = elapsedSeconds * 1.5;
+        longWaitElement.textContent = `Estamos processando sua solicitação. Tempo estimado: ${formatTime(estimatedTotalTime)}`;
+        longWaitMessage.style.display = 'flex';
+    }
+    
+    updateProgress(elapsedSeconds, estimatedTotalTime || 10);
+}
+
+function downloadResults(data, filename) {
+    let content = '';
+    data.forEach((message, index) => {
+        content += `=== Mensagem ${index + 1} ===\n`;
+        content += `Categoria: ${message.categoria}\n`;
+        content += `Palavras-chave: ${message.keywords.join(', ')}\n`;
+        if (message.justificativa) content += `Justificativa: ${message.justificativa}\n`;
+        content += `\nResposta sugerida:\n${message.resposta}\n\n`;
+        content += `---\n\n`;
+    });
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'resultados_classificacao.txt';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+function showProcessingInfo(info) {
+    processingInfo.innerHTML = `
+        <div class="info-card">
+            <div class="info-item">
+                <i class="fas fa-${info.is_file ? 'file-alt' : 'keyboard'}"></i>
+                <span>${info.is_file ? 'Arquivo processado' : 'Texto processado'}</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-envelope"></i>
+                <span>${info.num_messages} mensagem${info.num_messages > 1 ? 's' : ''}</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-stopwatch"></i>
+                <span>${formatTime(info.actual_time)} (${info.mode})</span>
+            </div>
+        </div>
+    `;
+}
+
+function createMessageElement(message, index) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message-result ${message.categoria.toLowerCase()}`;
+    
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <h3><span class="message-number">Mensagem ${index + 1}</span></h3>
+            <span class="category-badge ${message.categoria.toLowerCase()}">
+                <i class="fas fa-${message.categoria === 'Produtivo' ? 'check-circle' : 'times-circle'}"></i>
+                ${message.categoria}
+            </span>
+        </div>
+        <div class="message-content">
+            <div class="keywords-section">
+                <strong>Palavras-chave:</strong>
+                <div class="keywords-container">
+                    ${message.keywords.map(kw => `<span class="keyword">${kw}</span>`).join('')}
+                </div>
+            </div>
+            <div class="response-section">
+                <strong>Resposta sugerida:</strong>
+                <div class="response-text" id="response-${index}"></div>
+            </div>
+            ${message.justificativa ? `
+            <div class="justification-section">
+                <strong>Justificativa:</strong>
+                <div class="justification-text">${message.justificativa}</div>
+            </div>` : ''}
+        </div>
+    `;
+    
+    return messageDiv;
+}
+
+function typeWriter(text, element, speed = 20) {
+    let i = 0;
+    function typing() {
+        if (i < text.length) {
+            element.innerHTML += text.charAt(i);
+            i++;
+            setTimeout(typing, speed);
+        }
+    }
+    typing();
+}
+
+function updatePreview() {
+    const text = textArea.value.trim();
+    preview.innerHTML = text ? text.replace(/\n/g, '<br>') : 'Nenhuma pré-visualização disponível.';
+}
+
+function validateInput() {
+    const text = textArea.value.trim();
+    if (!text && fileInput.files.length === 0) {
+        textError.textContent = 'Por favor, insira um texto ou envie um arquivo.';
+        textArea.classList.add('invalid');
+        return false;
+    }
+    textError.textContent = '';
+    textArea.classList.remove('invalid');
+    return true;
+}
+
+function addToHistory(data, processingInfo, input) {
+    const timestamp = new Date().toLocaleString('pt-BR');
+    const historyItem = { timestamp, data, processingInfo, input };
+    analysisHistory.unshift(historyItem);
+    if (analysisHistory.length > 5) analysisHistory.pop();
+    localStorage.setItem('analysisHistory', JSON.stringify(analysisHistory));
+    renderHistory();
+}
+
+function renderHistory() {
+    historyList.innerHTML = '';
+    analysisHistory.forEach((item, index) => {
+        const historyDiv = document.createElement('div');
+        historyDiv.className = 'history-item';
+        historyDiv.innerHTML = `
+            <span>${item.timestamp} - ${item.processingInfo.num_messages} mensagem${item.processingInfo.num_messages > 1 ? 's' : ''} (${item.processingInfo.mode})</span>
+            <button class="view-history-btn">Visualizar</button>
+        `;
+        historyDiv.querySelector('.view-history-btn').addEventListener('click', () => {
+            messagesContainer.innerHTML = '';
+            item.data.forEach((message, i) => {
+                const messageElement = createMessageElement(message, i);
+                messagesContainer.appendChild(messageElement);
+                typeWriter(message.resposta, document.getElementById(`response-${i}`));
+            });
+            showProcessingInfo(item.processingInfo);
+            results.style.display = 'block';
+            historyContainer.scrollIntoView({ behavior: 'smooth' });
+        });
+        historyList.appendChild(historyDiv);
+    });
+}
+
+fileInput.addEventListener('change', (e) => {
+    if (fileInput.files.length > 0) {
+        fileNameSpan.textContent = fileInput.files[0].name;
+        textArea.disabled = true;
+        preview.innerHTML = 'Pré-visualização não disponível para arquivos.';
+        validateInput();
+    } else {
+        fileNameSpan.textContent = '';
+        textArea.disabled = false;
+        updatePreview();
+        validateInput();
+    }
+});
+
+textArea.addEventListener('input', () => {
+    updatePreview();
+    validateInput();
+});
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!validateInput()) return;
+
+    const text = textArea.value.trim();
+    const processingMode = document.querySelector('input[name="processing-mode"]:checked').value;
+
+    const formData = new FormData();
+    if (fileInput.files.length > 0) {
+        formData.append('file', fileInput.files[0]);
+    } else {
+        formData.append('text', text);
+    }
+    formData.append('mode', processingMode);
+
+    loading.style.display = 'flex';
+    results.style.display = 'none';
+    historyContainer.style.display = 'none';
+    messagesContainer.innerHTML = '';
+    processingInfo.innerHTML = '';
+    longWaitMessage.style.display = 'none';
+    progressFill.style.width = '0%';
+    
+    processingStartTime = Date.now();
+    estimatedTimeSpan.textContent = `Tempo estimado: ${processingMode === 'fast' ? '2-5s' : processingMode === 'balanced' ? '5-10s' : '10-20s'}`;
+    longWaitTimeout = setInterval(updateLongWaitMessage, 1000);
+
+    try {
+        const res = await fetch('/process-email', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!res.ok) {
+            throw new Error(await res.text() || 'Erro ao processar o email');
+        }
+
+        const data = await res.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        clearInterval(longWaitTimeout);
+        processingStartTime = null;
+
+        currentData = data.results;
+        showProcessingInfo(data.processing_info);
+        addToHistory(data.results, data.processing_info, text || fileInput.files[0]?.name);
+
+        if (fileInput.files.length > 0) {
+            const originalFilename = fileInput.files[0].name;
+            const newFilename = originalFilename.replace('.txt', '_classificado.txt');
+            downloadResults(data.results, newFilename);
+            loading.style.display = 'none';
+            showNotification('Download do arquivo classificado iniciado!', 'success');
+        } else {
+            data.results.forEach((message, index) => {
+                const messageElement = createMessageElement(message, index);
+                messagesContainer.appendChild(messageElement);
+                typeWriter(message.resposta, document.getElementById(`response-${index}`));
+            });
+            loading.style.display = 'none';
+            results.style.display = 'block';
+            historyContainer.style.display = 'block';
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+    } catch (error) {
+        clearInterval(longWaitTimeout);
+        processingStartTime = null;
+        loading.style.display = 'none';
+        showNotification(error.message, 'error');
+    }
+});
+
+downloadBtn.addEventListener('click', () => {
+    if (currentData) {
+        downloadResults(currentData);
+    } else {
+        showNotification('Nenhum dado disponível para exportar', 'warning');
+    }
+});
+
+themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    themeToggle.innerHTML = `<i class="fas fa-${isDark ? 'sun' : 'moon'}"></i><span>Modo ${isDark ? 'Claro' : 'Escuro'}</span>`;
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+});
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <i class="fas fa-${
+            type === 'error' ? 'exclamation-circle' : 
+            type === 'success' ? 'check-circle' : 'info-circle'
+        }"></i>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 5000);
+}
+
+document.querySelectorAll('.feedback-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const isPositive = btn.classList.contains('positive');
+        showNotification(
+            `Obrigado pelo seu feedback! ${isPositive ? 'Ficamos felizes em ajudar.' : 'Vamos melhorar nosso serviço.'}`,
+            isPositive ? 'success' : 'info'
+        );
+    });
+});
+
+// Initialize theme
+if (localStorage.getItem('theme') === 'dark') {
+    document.body.classList.add('dark-mode');
+    themeToggle.innerHTML = '<i class="fas fa-sun"></i><span>Modo Claro</span>';
+}
+
+// Initialize preview and history
+updatePreview();
+renderHistory();
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+# Arquivos do Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Ambiente virtual
+venv/
+env/
+.venv/
+
+# Arquivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos de treino de modelos
+/trained_model/
+*.pth
+*.bin
+*.h5
+*.joblib
+*.model
+
+# Arquivos de configuração e ambiente
+.env
+*.env
+secrets.json
+config.json
+
+# Logs e dados de desenvolvimento
+*.log
+logs/
+data/
+*.csv
+*.jsonl
+*.parquet
+
+# Cache e arquivos temporários
+.cache/
+*.tmp
+*.bak
+
+# Arquivos do Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de documentação
+docs/_build/
+
+# Testes e cobertura
+htmlcov/
+.tox/
+.nox/
+.coverage
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Arquivos específicos do projeto
+/cache/
+/emails_processed/
